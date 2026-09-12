@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Kígyós Játék</title>
+  
+  <!-- Apple Web App / PWA Meta tags for iOS -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Kígyós Játék">
+  <link rel="apple-touch-icon" href="https://placehold.co/180x180/10b981/ffffff?text=🐍">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <style>
+    body {
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    
+    /* Glowing effects for iOS aesthetic */
+    .glow-green {
+      box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
+    }
+    .glow-red {
+      box-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
+    }
+    
+    /* Glassmorphic UI element */
+    .glass-card {
+      background: rgba(30, 41, 59, 0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .btn-touch {
+      transition: all 0.1s ease;
+    }
+    .btn-touch:active {
+      transform: scale(0.92);
+      background-color: rgba(71, 85, 105, 0.8);
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-white min-h-screen flex flex-col justify-between items-center p-4 select-none overflow-hidden">
+
+  <!-- Header & Scoreboard -->
+  <header class="w-full max-w-sm mt-2 mb-2">
+    <div class="glass-card rounded-2xl p-4 flex justify-between items-center shadow-lg">
+      <div class="flex flex-col">
+        <span class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Pontszám</span>
+        <span id="score" class="text-3xl font-extrabold text-emerald-400">0</span>
+      </div>
+      <div class="flex flex-col items-end">
+        <span class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Életek</span>
+        <div id="lives" class="text-2xl tracking-widest mt-1">❤️❤️❤️</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Canvas Container -->
+  <main class="relative w-full max-w-sm flex justify-center items-center my-auto">
+    <div class="relative p-1 bg-slate-800/80 rounded-3xl border border-slate-700/50 shadow-2xl glow-green">
+      <canvas id="gameCanvas" width="320" height="320" class="bg-slate-900 rounded-2xl block"></canvas>
+      
+      <!-- Modal Overlay for Game Over or Pause -->
+      <div id="modal" class="absolute inset-0 bg-slate-950/85 backdrop-blur-md rounded-2xl flex flex-col justify-center items-center p-6 text-center transition-all duration-300 opacity-0 pointer-events-none z-10">
+        <h2 id="modalTitle" class="text-3xl font-black text-white mb-2">Játék Vége!</h2>
+        <p id="modalDesc" class="text-slate-300 mb-6">Elért pontszám: <span id="finalScore" class="font-bold text-emerald-400">0</span></p>
+        <button id="restartBtn" class="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-slate-950 font-bold px-8 py-3 rounded-full text-lg transition shadow-lg shadow-emerald-500/30">
+          Újraindítás
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <!-- Mobile D-Pad Controls -->
+  <footer class="w-full max-w-sm mb-4 mt-2">
+    <div class="grid grid-cols-3 gap-3 w-48 mx-auto">
+      <div></div>
+      <button id="btnUp" class="btn-touch h-14 bg-slate-800/90 text-2xl border border-slate-700/60 rounded-2xl flex items-center justify-center shadow-lg active:border-emerald-500">
+        ⬆️
+      </button>
+      <div></div>
+      <button id="btnLeft" class="btn-touch h-14 bg-slate-800/90 text-2xl border border-slate-700/60 rounded-2xl flex items-center justify-center shadow-lg active:border-emerald-500">
+        ⬅️
+      </button>
+      <button id="btnDown" class="btn-touch h-14 bg-slate-800/90 text-2xl border border-slate-700/60 rounded-2xl flex items-center justify-center shadow-lg active:border-emerald-500">
+        ⬇️
+      </button>
+      <button id="btnRight" class="btn-touch h-14 bg-slate-800/90 text-2xl border border-slate-700/60 rounded-2xl flex items-center justify-center shadow-lg active:border-emerald-500">
+        ➡️
+      </button>
+    </div>
+    <p class="text-center text-xs text-slate-500 mt-3 font-medium">Húzd el az ujjad a pályán vagy használd a gombokat!</p>
+  </footer>
+
+  <!-- Game Logic & Animations -->
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const scoreElement = document.getElementById("score");
+    const livesElement = document.getElementById("lives");
+    const modal = document.getElementById("modal");
+    const modalTitle = document.getElementById("modalTitle");
+    const modalDesc = document.getElementById("modalDesc");
+    const finalScore = document.getElementById("finalScore");
+    const restartBtn = document.getElementById("restartBtn");
+
+    const gridSize = 16;
+    const tileCount = canvas.width / gridSize;
+
+    // Game state variables
+    let score = 0;
+    let lives = 3;
+    let dx = gridSize;
+    let dy = 0;
+    let nextDx = gridSize;
+    let nextDy = 0;
+
+    // Slower frame rate for comfortable mobile control (210ms per move instead of 120ms)
+    const moveInterval = 210; 
+
+    let snake = [
+      { x: 160, y: 160 },
+      { x: 144, y: 160 },
+      { x: 128, y: 160 }
+    ];
+
+    let apple = { x: 0, y: 0 };
+    let gameLoop = null;
+    let isGameOver = false;
+
+    // Initialize game
+    generateApple();
+    updateLivesDisplay();
+    startLoop();
+
+    function startLoop() {
+      if (gameLoop) clearInterval(gameLoop);
+      gameLoop = setInterval(draw, moveInterval);
+    }
+
+    function generateApple() {
+      let validPosition = false;
+      while (!validPosition) {
+        apple.x = Math.floor(Math.random() * tileCount) * gridSize;
+        apple.y = Math.floor(Math.random() * tileCount) * gridSize;
+        // Ensure apple does not spawn inside snake
+        validPosition = !snake.some(segment => segment.x === apple.x && segment.y === apple.y);
+      }
+    }
+
+    function updateLivesDisplay() {
+      livesElement.textContent = "❤️".repeat(Math.max(0, lives));
+    }
+
+    function resetSnake() {
+      snake = [
+        { x: 160, y: 160 },
+        { x: 144, y: 160 },
+        { x: 128, y: 160 }
+      ];
+      dx = gridSize;
+      dy = 0;
+      nextDx = gridSize;
+      nextDy = 0;
+    }
+
+    function draw() {
+      if (isGameOver) return;
+
+      // Apply buffered directions
+      dx = nextDx;
+      dy = nextDy;
+
+      // Calculate new head position
+      const head = { x: snake[0].x + dx, y: snake[0].y + dy };
+
+      // Wall collision check
+      if (head.x < 0 || head.x >= canvas.width || head.y < 0 || head.y >= canvas.height) {
+        handleLifeLoss("Falnak ütköztél!");
+        return;
+      }
+
+      // Self collision check
+      for (let i = 0; i < snake.length; i++) {
+        if (head.x === snake[i].x && head.y === snake[i].y) {
+          handleLifeLoss("Magadba haraptál!");
+          return;
+        }
+      }
+
+      // Add new head
+      snake.unshift(head);
+
+      // Apple collection check
+      if (head.x === apple.x && head.y === apple.y) {
+        score += 1;
+        scoreElement.textContent = score;
+        generateApple();
+      } else {
+        snake.pop(); // Remove tail segment
+      }
+
+      // Render graphics
+      renderCanvas();
+    }
+
+    function renderCanvas() {
+      // Clear background
+      ctx.fillStyle = "#0f172a"; // Tailwind slate-900
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Draw Grid (Subtle)
+      ctx.strokeStyle = "#1e293b";
+      ctx.lineWidth = 0.5;
+      for (let i = 0; i < canvas.width; i += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(i, 0);
+        ctx.lineTo(i, canvas.height);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, i);
+        ctx.lineTo(canvas.width, i);
+        ctx.stroke();
+      }
+
+      // Draw Apple (Red shiny circle)
+      ctx.fillStyle = "#ef4444"; // Red-500
+      ctx.beginPath();
+      ctx.arc(apple.x + gridSize / 2, apple.y + gridSize / 2, gridSize / 2 - 1, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Apple leaf
+      ctx.fillStyle = "#22c55e";
+      ctx.fillRect(apple.x + gridSize / 2 - 1, apple.y + 1, 3, 3);
+
+      // Draw Snake
+      snake.forEach((part, index) => {
+        if (index === 0) {
+          // Snake Head
+          ctx.fillStyle = "#10b981"; // Emerald-500
+          ctx.beginPath();
+          ctx.roundRect(part.x, part.y, gridSize - 1, gridSize - 1, 5);
+          ctx.fill();
+
+          // Snake Eyes
+          ctx.fillStyle = "#ffffff";
+          let eyeX1 = part.x + 4, eyeY1 = part.y + 4;
+          let eyeX2 = part.x + 10, eyeY2 = part.y + 4;
+          
+          if (dx > 0) { eyeX1 = part.x + 10; eyeY1 = part.y + 4; eyeX2 = part.x + 10; eyeY2 = part.y + 10; }
+          else if (dx < 0) { eyeX1 = part.x + 4; eyeY1 = part.y + 4; eyeX2 = part.x + 4; eyeY2 = part.y + 10; }
+          else if (dy > 0) { eyeX1 = part.x + 4; eyeY1 = part.y + 10; eyeX2 = part.x + 10; eyeY2 = part.y + 10; }
+
+          ctx.fillRect(eyeX1, eyeY1, 2, 2);
+          ctx.fillRect(eyeX2, eyeY2, 2, 2);
+        } else {
+          // Snake Body (Gradient effect)
+          const opacity = Math.max(0.4, 1 - (index / snake.length) * 0.5);
+          ctx.fillStyle = `rgba(52, 211, 153, ${opacity})`; // Emerald-400
+          ctx.beginPath();
+          ctx.roundRect(part.x, part.y, gridSize - 1, gridSize - 1, 3);
+          ctx.fill();
+        }
+      });
+    }
+
+    function handleLifeLoss(reason) {
+      lives -= 1;
+      updateLivesDisplay();
+
+      // Screen flash red effect on hit
+      canvas.classList.add('glow-red');
+      setTimeout(() => canvas.classList.remove('glow-red'), 400);
+
+      if (lives <= 0) {
+        isGameOver = true;
+        clearInterval(gameLoop);
+        showModal("Vége a játéknak!", `${reason} Elfogytak az életeid.`);
+      } else {
+        resetSnake();
+      }
+    }
+
+    function showModal(title, description) {
+      modalTitle.textContent = title;
+      modalDesc.innerHTML = `${description}<br><span class="inline-block mt-2 font-bold text-emerald-400">Végső pontszám: ${score}</span>`;
+      modal.classList.remove('opacity-0', 'pointer-events-none');
+    }
+
+    function restartGame() {
+      score = 0;
+      lives = 3;
+      isGameOver = false;
+      scoreElement.textContent = score;
+      updateLivesDisplay();
+      resetSnake();
+      generateApple();
+      modal.classList.add('opacity-0', 'pointer-events-none');
+      startLoop();
+    }
+
+    restartBtn.addEventListener('click', restartGame);
+
+    // Direction Setters
+    function setDirectionUp() { if (dy === 0) { nextDx = 0; nextDy = -gridSize; } }
+    function setDirectionDown() { if (dy === 0) { nextDx = 0; nextDy = gridSize; } }
+    function setDirectionLeft() { if (dx === 0) { nextDx = -gridSize; nextDy = 0; } }
+    function setDirectionRight() { if (dx === 0) { nextDx = gridSize; nextDy = 0; } }
+
+    // Touch D-Pad Events
+    document.getElementById("btnUp").addEventListener("pointerdown", e => { e.preventDefault(); setDirectionUp(); });
+    document.getElementById("btnDown").addEventListener("pointerdown", e => { e.preventDefault(); setDirectionDown(); });
+    document.getElementById("btnLeft").addEventListener("pointerdown", e => { e.preventDefault(); setDirectionLeft(); });
+    document.getElementById("btnRight").addEventListener("pointerdown", e => { e.preventDefault(); setDirectionRight(); });
+
+    // Keyboard Arrow Controls
+    window.addEventListener("keydown", e => {
+      switch (e.key) {
+        case "ArrowUp": case "w": case "W": setDirectionUp(); break;
+        case "ArrowDown": case "s": case "S": setDirectionDown(); break;
+        case "ArrowLeft": case "a": case "A": setDirectionLeft(); break;
+        case "ArrowRight": case "d": case "D": setDirectionRight(); break;
+      }
+    });
+
+    // Touch Swipe Detection on Canvas
+    let touchStartX = 0;
+    let touchStartY = 0;
+
+    canvas.addEventListener('touchstart', e => {
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+    }, { passive: true });
+
+    canvas.addEventListener('touchend', e => {
+      let diffX = e.changedTouches[0].clientX - touchStartX;
+      let diffY = e.changedTouches[0].clientY - touchStartY;
+      const minSwipeDistance = 20;
+
+      if (Math.abs(diffX) > Math.abs(diffY)) {
+        if (Math.abs(diffX) > minSwipeDistance) {
+          if (diffX > 0) setDirectionRight();
+          else setDirectionLeft();
+        }
+      } else {
+        if (Math.abs(diffY) > minSwipeDistance) {
+          if (diffY > 0) setDirectionDown();
+          else setDirectionUp();
+        }
+      }
+    }, { passive: true });
+  </script>
+</body>
+</html>
