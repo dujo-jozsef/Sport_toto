@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Kígyós Játék</title>
+  <!-- iPhone App beállítások -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #121212;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      overflow: hidden;
+      touch-action: none;
+    }
+    #ui {
+      display: flex;
+      justify-content: space-between;
+      width: 320px;
+      margin-bottom: 10px;
+      font-size: 18px;
+      font-weight: bold;
+    }
+    canvas {
+      background-color: #1e1e1e;
+      border: 3px solid #444;
+      border-radius: 8px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+    }
+    .controls {
+      margin-top: 15px;
+      display: grid;
+      grid-template-columns: repeat(3, 60px);
+      grid-template-rows: repeat(2, 60px);
+      gap: 10px;
+    }
+    .btn {
+      background: #333;
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .btn:active {
+      background: #555;
+    }
+    #up { grid-column: 2; grid-row: 1; }
+    #left { grid-column: 1; grid-row: 2; }
+    #down { grid-column: 2; grid-row: 2; }
+    #right { grid-column: 3; grid-row: 2; }
+  </style>
+</head>
+<body>
+
+  <div id="ui">
+    <div>Pont: <span id="score">0</span></div>
+    <div>Élet: <span id="lives">❤️❤️❤️</span></div>
+  </div>
+
+  <canvas id="gameCanvas" width="320" height="320"></canvas>
+
+  <!-- Érintőgombok mobilra -->
+  <div class="controls">
+    <button class="btn" id="up">⬆️</button>
+    <button class="btn" id="left">⬅️</button>
+    <button class="btn" id="down">⬇️</button>
+    <button class="btn" id="right">➡️</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const scoreElement = document.getElementById("score");
+    const livesElement = document.getElementById("lives");
+
+    const gridSize = 16;
+    const tileCount = canvas.width / gridSize;
+
+    let score = 0;
+    let lives = 3;
+    let dx = gridSize;
+    let dy = 0;
+
+    let snake = [
+      { x: 160, y: 160 },
+      { x: 144, y: 160 },
+      { x: 128, y: 160 }
+    ];
+
+    let apple = { x: 0, y: 0 };
+    generateApple();
+
+    let gameLoop;
+    function startLoop() {
+      clearInterval(gameLoop);
+      gameLoop = setInterval(draw, 120);
+    }
+    startLoop();
+
+    function generateApple() {
+      apple.x = Math.floor(Math.random() * tileCount) * gridSize;
+      apple.y = Math.floor(Math.random() * tileCount) * gridSize;
+    }
+
+    function updateLivesDisplay() {
+      livesElement.textContent = "❤️".repeat(Math.max(0, lives));
+    }
+
+    function resetSnake() {
+      snake = [
+        { x: 160, y: 160 },
+        { x: 144, y: 160 },
+        { x: 128, y: 160 }
+      ];
+      dx = gridSize;
+      dy = 0;
+    }
+
+    function draw() {
+      // Fej mozgása
+      const head = { x: snake[0].x + dx, y: snake[0].y + dy };
+
+      // Ütközés a fallal
+      if (head.x < 0 || head.x >= canvas.width || head.y < 0 || head.y >= canvas.height) {
+        handleLifeLoss();
+        return;
+      }
+
+      // Ütközés önmagával
+      for (let i = 0; i < snake.length; i++) {
+        if (head.x === snake[i].x && head.y === snake[i].y) {
+          handleLifeLoss();
+          return;
+        }
+      }
+
+      snake.unshift(head);
+
+      // Alma megevése
+      if (head.x === apple.x && head.y === apple.y) {
+        score += 1;
+        scoreElement.textContent = score;
+        generateApple();
+      } else {
+        snake.pop();
+      }
+
+      // Háttér letisztítása
+      ctx.fillStyle = "#1e1e1e";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Alma megrajzolása (Piros)
+      ctx.fillStyle = "#ff4d4d";
+      ctx.beginPath();
+      ctx.arc(apple.x + gridSize/2, apple.y + gridSize/2, gridSize/2 - 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Kígyó megrajzolása (Zöld)
+      ctx.fillStyle = "#4caf50";
+      snake.forEach((part, index) => {
+        ctx.fillRect(part.x, part.y, gridSize - 1, gridSize - 1);
+      });
+    }
+
+    function handleLifeLoss() {
+      lives -= 1;
+      updateLivesDisplay();
+
+      if (lives <= 0) {
+        alert("Játék vége! Végső pontszám: " + score);
+        lives = 3;
+        score = 0;
+        scoreElement.textContent = score;
+        updateLivesDisplay();
+      }
+      resetSnake();
+    }
+
+    // Irányítás gombokkal
+    document.getElementById("up").onclick = () => { if (dy === 0) { dx = 0; dy = -gridSize; } };
+    document.getElementById("down").onclick = () => { if (dy === 0) { dx = 0; dy = gridSize; } };
+    document.getElementById("left").onclick = () => { if (dx === 0) { dx = -gridSize; dy = 0; } };
+    document.getElementById("right").onclick = () => { if (dx === 0) { dx = gridSize; dy = 0; } };
+
+    // Swipelés (csúsztatás) támogatása érintőképernyőn
+    let touchStartX = 0;
+    let touchStartY = 0;
+
+    canvas.addEventListener('touchstart', e => {
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+    });
+
+    canvas.addEventListener('touchend', e => {
+      let diffX = e.changedTouches[0].clientX - touchStartX;
+      let diffY = e.changedTouches[0].clientY - touchStartY;
+
+      if (Math.abs(diffX) > Math.abs(diffY)) {
+        if (diffX > 0 && dx === 0) { dx = gridSize; dy = 0; }
+        else if (diffX < 0 && dx === 0) { dx = -gridSize; dy = 0; }
+      } else {
+        if (diffY > 0 && dy === 0) { dx = 0; dy = gridSize; }
+        else if (diffY < 0 && dy === 0) { dx = 0; dy = -gridSize; }
+      }
+    });
+  </script>
+</body>
+</html>
